@@ -102,6 +102,8 @@ ax0.set_title(f'{title}', fontsize=FONTSIZE_L1, pad=25)
 for process_name in gp_dict:
     gp = gp_dict[process_name]
     ax0.plot(gp.cumsum(), label=process_name, linewidth=3)
+diff = gp_dict["merge_agg_240902_add_syh_pos4/predict"] - gp_dict["merge_agg_240902_double3m_15d_73/predict"]
+ax0.plot(diff.cumsum(), label='diff', linewidth=3)
 
 ax0.grid(linestyle=":")
 ax0.legend(loc="upper left", borderaxespad=0.5, fontsize=FONTSIZE_L3)

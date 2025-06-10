@@ -44,12 +44,13 @@ def main():
     parser.add_argument('-t', '--test_name', type=str, default='regular_twd30', help='test_name')
     parser.add_argument('-skip', '--skip_plot', type=bool, default=False, help='skip_plot')
     parser.add_argument('-wkr', '--n_workers', type=int, default=1, help='n_workers')
+    parser.add_argument('-se', '--skip_exists', action='store_true', help='skip_exists')
     args = parser.parse_args()
-    args_dict = vars(args)
+    args_dict = {k: v for k, v in vars(args).items() if k != 'skip_exists'}
 
     # main
     tester = FactorTest(**args_dict)
-    tester.test_multi_factors()
+    tester.test_multi_factors(skip_exists=args.skip_exists)
         
 
 # %% main

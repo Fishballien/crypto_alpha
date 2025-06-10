@@ -31,7 +31,7 @@ warnings.filterwarnings("ignore")
 
 from utils.dirutils import DirectoryProcessor, compare_directories
 from utils.timeutils import RollingPeriods, translate_rolling_params
-from test_and_eval.factor_tester_fix_sp import FactorTest
+from test_and_eval.factor_tester_adaptive import FactorTest
 from test_and_eval.factor_evaluation import FactorEvaluation
 from utils.logutils import FishStyleLogger
 
@@ -71,6 +71,8 @@ class AggTestEval:
         test_name = test_pr['test_name']
         skip_plot = test_pr['skip_plot']
         retest_tolerance = test_pr['retest_tolerance']
+        date_start = test_pr.get('date_start')
+        date_end = test_pr.get('date_end')
         
         self.test_params = toml.load(self.param_dir / 'test' / f'{test_name}.toml')
         
@@ -84,6 +86,8 @@ class AggTestEval:
                 'test_name': test_name, 
                 'skip_plot': skip_plot,
                 'n_workers': self.test_wkr,
+                'date_start': date_start,
+                'date_end': date_end, 
             }
     
             for process_name in process_name_list:

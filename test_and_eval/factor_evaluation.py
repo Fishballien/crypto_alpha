@@ -43,15 +43,15 @@ def eval_one_factor_one_period(factor_name, *, date_start, date_end, data_date_s
         }
     try:
         df_gp = pd.read_parquet(data_dir / f'gp_{factor_name}.parquet')
-        df_ic = pd.read_parquet(data_dir / f'icd_{factor_name}.parquet')
+        # df_ic = pd.read_parquet(data_dir / f'icd_{factor_name}.parquet')
         # df_xicor = pd.read_parquet(data_dir / f'xicord_{factor_name}.parquet')
         df_hsr = pd.read_parquet(data_dir / f'hsr_{factor_name}.parquet')
         try:
             df_mmt = pd.read_parquet(data_dir / f'mmt_{factor_name}.parquet')
         except:
             pass
-        with open(data_dir / f'bins_{factor_name}.pkl', 'rb') as file:
-            bins_of_lag = pickle.load(file)
+        # with open(data_dir / f'bins_{factor_name}.pkl', 'rb') as file:
+        #     bins_of_lag = pickle.load(file)
         try:
             with open(data_dir / f'bins_sw_{factor_name}.pkl', 'rb') as file:
                 bins_of_lag_sw = pickle.load(file)
@@ -69,7 +69,7 @@ def eval_one_factor_one_period(factor_name, *, date_start, date_end, data_date_s
     res_dict.update({'direction': direction})
     
     df_gp = df_gp[(df_gp.index >= date_start) & (df_gp.index <= date_end)]
-    df_ic = df_ic[(df_ic.index >= date_start) & (df_ic.index <= date_end)]
+    # df_ic = df_ic[(df_ic.index >= date_start) & (df_ic.index <= date_end)]
     # df_xicor = df_xicor[(df_xicor.index >= date_start) & (df_xicor.index <= date_end)]
     df_hsr = df_hsr[(df_hsr.index >= date_start) & (df_hsr.index <= date_end)]
     try:
@@ -97,10 +97,10 @@ def eval_one_factor_one_period(factor_name, *, date_start, date_end, data_date_s
     res_dict.update({'diff_with_lag_1': diff_with_lag_1})
     
     # ic
-    for ic_type in df_ic.columns:
-        ic_sharpe = np.mean(df_ic[ic_type]) / np.std(df_ic[ic_type]) * np.sqrt(365)
-        ic_sharpe_with_direction = ic_sharpe * direction
-        res_dict.update({f'{ic_type}': ic_sharpe, f'{ic_type}_with_direction': ic_sharpe_with_direction})
+    # for ic_type in df_ic.columns:
+    #     ic_sharpe = np.mean(df_ic[ic_type]) / np.std(df_ic[ic_type]) * np.sqrt(365)
+    #     ic_sharpe_with_direction = ic_sharpe * direction
+    #     res_dict.update({f'{ic_type}': ic_sharpe, f'{ic_type}_with_direction': ic_sharpe_with_direction})
         
         
     # xicor
@@ -115,14 +115,16 @@ def eval_one_factor_one_period(factor_name, *, date_start, date_end, data_date_s
     res_dict.update({'hsr': hsr})
     
     # bins
-    bins_of_lag_0 = bins_of_lag[0]
-    bins_of_lag_0 = bins_of_lag_0[(bins_of_lag_0.index >= date_start) & (bins_of_lag_0.index <= date_end)]
-    bin_long_short = (bins_of_lag_0['90% - 100%'] - bins_of_lag_0['0% - 10%']) * direction
-    bin_long_short_metrics = get_general_return_metrics(bin_long_short)
-    res_dict.update({f'bin_{k}': v for k, v in bin_long_short_metrics.items()})
-    bins_cumrtn = bins_of_lag_0.sum(axis=0) * direction
-    quantile_performance = np.corrcoef(bins_cumrtn, list(range(10)))[0, 1]
-    res_dict.update({'quantile_performance': quantile_performance})
+# =============================================================================
+#     bins_of_lag_0 = bins_of_lag[0]
+#     bins_of_lag_0 = bins_of_lag_0[(bins_of_lag_0.index >= date_start) & (bins_of_lag_0.index <= date_end)]
+#     bin_long_short = (bins_of_lag_0['90% - 100%'] - bins_of_lag_0['0% - 10%']) * direction
+#     bin_long_short_metrics = get_general_return_metrics(bin_long_short)
+#     res_dict.update({f'bin_{k}': v for k, v in bin_long_short_metrics.items()})
+#     bins_cumrtn = bins_of_lag_0.sum(axis=0) * direction
+#     quantile_performance = np.corrcoef(bins_cumrtn, list(range(10)))[0, 1]
+#     res_dict.update({'quantile_performance': quantile_performance})
+# =============================================================================
     
     # bins sw
     if bins_of_lag_sw:
@@ -144,17 +146,21 @@ def eval_one_factor_one_period(factor_name, *, date_start, date_end, data_date_s
             print(bins_of_lag_0)
             
     # rtn with fee
-    sp_in_min = timestr_to_minutes(sp)
-    oneday_hs = 24*60 / sp_in_min * hsr
-    bin_ls_annrtn_with_fee = res_dict['bin_return_annualized'] - fee * 2 * oneday_hs * 365
-    res_dict.update({'bin_ls_annrtn_with_fee': bin_ls_annrtn_with_fee})
+# =============================================================================
+#     sp_in_min = timestr_to_minutes(sp)
+#     oneday_hs = 24*60 / sp_in_min * hsr
+#     bin_ls_annrtn_with_fee = res_dict['bin_return_annualized'] - fee * 2 * oneday_hs * 365
+#     res_dict.update({'bin_ls_annrtn_with_fee': bin_ls_annrtn_with_fee})
+# =============================================================================
     
     # adf
-    try:
-        adf_result = adfuller(df_mmt['factor_mean'].dropna())
-        res_dict.update({'adf_statistic': adf_result[0], 'adf_p_value': adf_result[1]})
-    except:
-        pass
+# =============================================================================
+#     try:
+#         adf_result = adfuller(df_mmt['factor_mean'].dropna())
+#         res_dict.update({'adf_statistic': adf_result[0], 'adf_p_value': adf_result[1]})
+#     except:
+#         pass
+# =============================================================================
     return res_dict
 
 
@@ -341,8 +347,8 @@ class FactorEvaluation:
         
         self._plot_sharpe_dist(period_name, res)
         self._plot_adf_and_sharpe(period_name, res)
-        if len(self.process_name_list) == 2:
-            self._plot_diff(period_name, res)
+        # if len(self.process_name_list) == 2:
+        #     self._plot_diff(period_name, res)
         
     def _plot_sharpe_dist(self, period_name, res):
         
@@ -358,6 +364,7 @@ class FactorEvaluation:
         ax0 = fig.add_subplot(spec[:, :])
         ax0.set_title(f'{title}', fontsize=FONTSIZE_L1, pad=25)
         for process_name, group_data in res.groupby('process_name'):
+            group_data = group_data.dropna(subset=['sharpe_ratio'])
             ax0.hist(group_data['sharpe_ratio'], label=process_name, alpha=.5, bins=50)
         
         for ax in [ax0,]:

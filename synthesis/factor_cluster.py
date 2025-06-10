@@ -45,11 +45,11 @@ def load_one_factor(selected_factor_info, n_fct, get_factor_func, outlier):
     
 class Cluster:
     
-    def __init__(self, cluster_name, t_executor=None, p_executor=None):
+    def __init__(self, cluster_name, t_workers=None, p_workers=None):
         self.cluster_name = cluster_name
 
-        self.t_executor = t_executor
-        self.p_executor = p_executor
+        self.t_workers = t_workers
+        self.p_workers = p_workers
         
         self._load_paths()
         self._load_cluster_params()
@@ -192,29 +192,33 @@ class Cluster:
         params = self.params
         outlier = params['outlier']
         factor_data_dir = self.factor_data_dir
-        
-        get_factor_func = partial(get_one_factor, factor_data_dir=factor_data_dir,
-                                  date_start=date_start, date_end=date_end)
+        get_factor_func = partial(get_one_factor, factor_data_dir=factor_data_dir, date_start=date_start, date_end=date_end)
         
         factor_dict = {}
-        if self.t_executor is None:
+    
+        # 判断是否需要线程池加载
+        if self.t_workers is None or self.t_workers <= 1:
+            # 不使用多线程
             for n_fct in tqdm(selected_factor_info.index, desc=f'load_data_{period_name}'):
                 process_name, factor_name = selected_factor_info.loc[n_fct, ['process_name', 'factor']]
                 factor = get_factor_func(process_name, factor_name)
                 factor = normalization(factor, outlier)
                 factor_dict[n_fct] = factor
         else:
-            load_tasks = [self.t_executor.submit(load_one_factor, 
-                                                 selected_factor_info, n_fct, get_factor_func, outlier)
-                          for n_fct in selected_factor_info.index]
-            for task in tqdm(as_completed(load_tasks), total=len(load_tasks), desc=f'load_data_{period_name}'):
-                n_fct, factor = task.result()
-                factor_dict[n_fct] = factor
-            
+            # 使用多线程
+            with ThreadPoolExecutor(max_workers=self.t_workers) as t_executor:
+                load_tasks = [t_executor.submit(load_one_factor, selected_factor_info, n_fct, get_factor_func, outlier)
+                              for n_fct in selected_factor_info.index]
+                for task in tqdm(as_completed(load_tasks), total=len(load_tasks), desc=f'load_data_{period_name}'):
+                    n_fct, factor = task.result()
+                    factor_dict[n_fct] = factor
+    
         len_selected = len(selected_factor_info)
         distance_matrix = np.zeros((len_selected, len_selected))
-        
-        if self.p_executor is None:
+    
+        # 判断是否需要进程池计算
+        if self.p_workers is None or self.p_workers <= 1:
+            # 不使用多进程
             for i in range(len_selected):
                 for j in range(i + 1, len_selected):
                     factor_i, factor_j = factor_dict[i], factor_dict[j]
@@ -222,20 +226,25 @@ class Cluster:
                     distance_matrix[i, j] = distance
                     distance_matrix[j, i] = distance
         else:
-            all_tasks = []
-            for i in range(len_selected):
-                for j in range(i + 1, len_selected):
-                    factor_i, factor_j = factor_dict[i], factor_dict[j]
-                    all_tasks.append(self.p_executor.submit(get_df_distance, factor_i, factor_j, i, j))
-            res_queue = Queue()
-            for task in tqdm(as_completed(all_tasks), total=len(all_tasks), desc=f'calc_cluster_{period_name}'):
-                res = task.result()
-                if res is not None:
-                    res_queue.put(res)
-            while not res_queue.empty():
-                i, j, distance = res_queue.get()
-                distance_matrix[i, j] = distance
-                distance_matrix[j, i] = distance
+            # 使用多进程
+            with ProcessPoolExecutor(max_workers=self.p_workers) as p_executor:
+                all_tasks = []
+                for i in range(len_selected):
+                    for j in range(i + 1, len_selected):
+                        factor_i, factor_j = factor_dict[i], factor_dict[j]
+                        all_tasks.append(p_executor.submit(get_df_distance, factor_i, factor_j, i, j))
+                
+                res_queue = Queue()
+                for task in tqdm(as_completed(all_tasks), total=len(all_tasks), desc=f'calc_cluster_{period_name}'):
+                    res = task.result()
+                    if res is not None:
+                        res_queue.put(res)
+                
+                while not res_queue.empty():
+                    i, j, distance = res_queue.get()
+                    distance_matrix[i, j] = distance
+                    distance_matrix[j, i] = distance
+    
         return distance_matrix
     
     def _calc_corr_by_ic_value(self, selected_factor_info, period_name, date_start, date_end):

@@ -45,11 +45,11 @@ twap_list = ['twd30_sp30']
 # test_name = 'ridge_v13_agg_240805_2_1y'
 # test_name = 'esmb_objv1_agg_240805_2'
 # test_name = "base_for_esmb_ridge_prcall"
-test_name = 'merge_agg_240902_double3m_15d_73'
-backtest_name = 'to_00125_maxmulti_2_mm_03_pf_001_correct'  # _mm_03_pf_001
+test_name = 'merge_agg_241113_double3m_15d_73'
+backtest_name = 'to_00125_maxmulti_2_mm_03_pf_001'  # mwgt_010 #_lqdt_500_mm_06 #_mm_03_pf_001
 # backtest_name = 'to_040_mwgt_040'
 
-plot_position_dist = False
+plot_position_dist = True
 plot_alpha_dist = False
 plot_dd_period = False
 
@@ -132,7 +132,7 @@ except FileNotFoundError:
     
 profd = profit.resample('1d').sum()
 profd['return'] = profd[f'raw_rtn_twd30_sp{sp}'] + profd['fee']
-metrics = get_general_return_metrics(profd.loc[:'20240701', 'return'].values)
+metrics = get_general_return_metrics(profd.loc[:, 'return'].values)
 
 
 # %%

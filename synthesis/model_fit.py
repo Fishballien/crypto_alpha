@@ -44,7 +44,7 @@ from xgboost import XGBRanker
 from utils.dirutils import load_path_config
 from utils.timeutils import period_shortcut, timestr_to_minutes
 from utils.datautils import get_one_factor, load_all_factors, load_one_group, align_index_with_main, replace_sp
-from utils.datautils import qcut_row
+from utils.datautils import qcut_row, add_dataframe_to_dataframe_reindex
 from data_processing.feature_engineering import normalization
 from test_and_eval.factor_tester_adaptive import FactorTest
 from utils.speedutils import gc_collect_after
@@ -133,8 +133,10 @@ class ModelFit(ABC):
         factor_data = self._load_n_preprocess_factors(start_date, end_date, ref_order_col=rtn_1p.columns,
                                                       ref_index=rtn_1p.index)
         rtn_1p_ravel = rtn_1p.values.reshape(-1, order='F')
-        self.to_mask_ravel = self.to_mask.values.reshape(-1, order='F')
+        mask_target = self.rtn_mask if self.mode == 'fit' else self.to_mask
+        self.to_mask_ravel = mask_target.isna().values.reshape(-1, order='F') # self.to_mask.values.reshape(-1, order='F')
         X = pd.DataFrame(factor_data[~self.to_mask_ravel, :], columns=self.features)
+        X.to_parquet(self.predict_dir / 'factors.parquet')
         y = rtn_1p_ravel[~self.to_mask_ravel]
         # if self.mode == 'predict':
         # breakpoint()
@@ -156,7 +158,9 @@ class ModelFit(ABC):
                                        ).shift(-pp_by_sp).replace([np.inf, -np.inf], np.nan)
         rtn_1p = rtn_1p[(rtn_1p.index >= start_date) & (rtn_1p.index < end_date)]
         self.rtn_1p = rtn_1p
-        self.to_mask = rtn_1p.isna()
+        twap_price = twap_price[(twap_price.index >= start_date) & (twap_price.index < end_date)]
+        self.to_mask = twap_price.isna() # rtn_1p.isna()
+        self.rtn_mask = rtn_1p.isna() # 不能把rtn1p设置为mask target，因为之后会填充0
         rtn_1p = self.normalization_func(rtn_1p)
         rtn_1p = rtn_1p.fillna(0)
         # breakpoint()
@@ -290,6 +294,8 @@ class ModelFit(ABC):
     
     def predict_once(self, model_start_date, model_end_date, 
                      pred_start_date, pred_end_date, source='multi', symbol=None):
+        if pred_start_date == pred_end_date:
+            return
         self.mode = 'predict'
         model_source_prefix = f'{source}_'
         self.model_period_suffix = period_shortcut(model_start_date, model_end_date)
@@ -310,16 +316,36 @@ class ModelFit(ABC):
         pass 
     
     def _save_predict_and_merge(self, y_pred):
+        # 保存当前预测结果到单独的文件
         y_pred.to_parquet(self.predict_dir / f'predict_{self.predict_suffix}_by_{self.model_suffix}.parquet')
-        
+    
         pred_all_path = self.predict_dir / f'predict_{self.test_name}.parquet'
+        
+        # 检查是否有已存在的汇总文件
         if os.path.exists(pred_all_path):
             pred_all = pd.read_parquet(pred_all_path)
+            pred_all = pred_all[(~(pred_all == 0).all(axis=1)) & (~pred_all.isna().all(axis=1))]
         else:
             pred_all = pd.DataFrame()
-        pred_all = pd.concat([pred_all, y_pred])
+        
+# =============================================================================
+#         # 过滤掉已存在于 pred_all 中的 y_pred 索引
+#         new_data = y_pred[~y_pred.index.isin(pred_all.index)]
+#         
+#         # 如果有新数据才进行合并和保存
+#         if not new_data.empty:
+#             # 合并并对索引进行排序
+#             pred_all = pd.concat([pred_all, new_data]).sort_index()
+#             
+#         else:
+#             print("没有新数据需要合并。")
+#             
+#         pred_all = pred_all[~pred_all.index.duplicated(keep='first')] # 去重
+# =============================================================================
+
+        pred_all = add_dataframe_to_dataframe_reindex(pred_all, y_pred)
         pred_all.to_parquet(pred_all_path)
-    
+
     def test_predicted(self):
         process_name = None
         factor_data_dir = self.predict_dir

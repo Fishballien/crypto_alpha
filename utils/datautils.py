@@ -84,7 +84,13 @@ def get_one_factor(process_name=None, factor_name=None, sp=None, factor_data_dir
     # process_name = 'ma15_sp240'
     factor_dir = factor_data_dir / process_name
     factor_path = factor_dir / f'{factor_name}.parquet'
-    factor = pd.read_parquet(factor_path)
+    try:
+        factor = pd.read_parquet(factor_path)
+    except:
+        print(factor_path)
+        traceback.print_exc()
+    if 'timestamp' in factor.columns:
+        factor.set_index('timestamp', inplace=True)
     factor = factor[(factor.index >= date_start) & (factor.index < date_end)]
     if ref_order_col is not None:
         factor = align_columns(ref_order_col, factor)
@@ -324,3 +330,26 @@ def qcut_row(row, q=10):
     qcut_result = pd.qcut(row_nonan, q=q, labels=False, duplicates='drop')
     result = pd.Series(qcut_result, index=row_nonan.index)
     return result.reindex_like(row)
+
+
+# %% merge
+def add_dataframe_to_dataframe_reindex(df, new_data):
+    """
+    使用 reindex 将新 DataFrame 的数据添加到目标 DataFrame 中，支持动态扩展列和行，原先没有值的地方填充 NaN。
+
+    参数:
+    df (pd.DataFrame): 目标 DataFrame。
+    new_data (pd.DataFrame): 要添加的新 DataFrame。
+
+    返回值:
+    df (pd.DataFrame): 更新后的 DataFrame。
+    """
+    # 同时扩展行和列，并确保未填充的空值为 NaN，按排序
+    df = df.reindex(index=df.index.union(new_data.index, sort=True),
+                    columns=df.columns.union(new_data.columns, sort=True),
+                    fill_value=np.nan)
+    
+    # 使用 loc 添加新数据
+    df.loc[new_data.index, new_data.columns] = new_data
+
+    return df

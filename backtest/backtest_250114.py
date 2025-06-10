@@ -44,9 +44,11 @@ twap_list = ['twd30_sp30']
 # test_name = 'esmb_objv1_pool_240827_ridge1_f1'
 # test_name = 'esmb_objv1_agg_240827_double3m'
 # test_name = "base_for_esmb_ridge_prcall"
-test_name = 'merge_agg_240919_double3m_15d'
+test_name = 'merge_agg_241113_double3m_15d_73'
+# test_name = 'merge_agg_241114_zxt_cgy_double3m_15d_73'
+# test_name = 'esmb_objv1_agg_241029_double3m_15d'
 # test_name = 'ridge_v13_agg_240805_lowhsr_1y'
-backtest_name = 'to_00125_maxmulti_25_mm_03_pf_001'  # mwgt_010 #_lqdt_500_mm_06 #_mm_03_pf_001
+backtest_name = 'to_00125_maxmulti_2_mm_03_pf_001'  # _mm_03_pf_001_tradv_5_0_volpen_abs_09
 # backtest_name = 'to_040_mwgt_040'
 
 
@@ -56,9 +58,11 @@ to_rate_thresh_L1 = 1
 to_rate_thresh_L2 = 1
 to_rate_thresh_L3 = 1
 to_rate_thresh_all = 1
-max_multi = 2.5
+max_multi = 2
 max_wgt = None
-tradv_thresh = 0 #5000000
+tradv_rolling_d = 20
+tradv_thresh = 0 #5_000_000 / (24*60/sp)
+tradv_dsct = 0
 momentum_limits = {11: 0.03, 22: 0.03, 33: 0.03, 44: 0.03} #{11: 0.03, 22: 0.03, 33: 0.03, 44: 0.03}
 pf_limits = {1: 0.001, 6: 0.001, 18: 0.001, 30: 0.001} # 1: 0.001, 6: 0.001, 18: 0.001, 30: 0.001
 big_move_days = 10000
@@ -67,8 +71,35 @@ steepness = None
 min_wgt = None
 outlier_n = 30
 quantile_transform = False
+rtn_vol_wd = 48
+rtn_vol_penalty_abs = 0.035
+rtn_vol_penalty_pct = None #0.9
+rtn_vol_penalty_mul = None
 
-FEE = 0.0008
+FEE = 0.00075
+
+symbols = [
+    # 'btcusdt',
+    # 'dogeusdt',
+    # 'ethusdt',
+    # 'solusdt',
+    # 'xrpusdt',
+    # '1000pepeusdt',
+    # '1000shibusdt',
+    # 'wifusdt',
+    # '1000bonkusdt',
+    # 'bnbusdt',
+    # 'adausdt',
+    # 'wldusdt',
+    # '1000flokiusdt',
+    # 'avaxusdt',
+    # 'aptusdt',
+    # 'bomeusdt',
+    # 'ordiusdt',
+    # 'nearusdt',
+    # 'maskusdt',
+    # 'uniusdt'
+    ]
 
 
 # %%
@@ -76,7 +107,7 @@ path_config = load_path_config(project_dir)
 processed_data_dir = Path(path_config['factor_data'])
 result_dir = Path(path_config['result']) / 'model'
 twap_data_dir = Path(path_config['twap_price'])
-
+tradv_dir = Path(path_config['tradv'])
 
 
 # %%
@@ -126,11 +157,19 @@ def calc_profit_before_next_t(w0, w1, rtn_c2c, rtn_cw0, rtn_cw1):
     return hold_pft
 
 
+def cumulative_volatility(returns):
+    squared_returns = returns ** 2
+    sum_squared = np.sum(squared_returns)
+    return np.sqrt(sum_squared)
+
+
 # %%
 name_to_save = f'{test_name}__{backtest_name}'
 # load twap & calc rtn
 curr_px_path = twap_data_dir / f'curr_price_sp{sp}.parquet'
-curr_price = pd.read_parquet(curr_px_path)
+curr_price = pd.read_parquet(curr_px_path) #.loc['20230701':]
+if symbols:
+    curr_price = curr_price[symbols]
 close_price = curr_price.shift(-1)
 main_columns = close_price.columns
 # del curr_price
@@ -138,7 +177,7 @@ main_columns = close_price.columns
 twap_dict = {}                                               
 for twap_name in twap_list:
     twap_path = twap_data_dir / f'{twap_name}.parquet'
-    twap_price = pd.read_parquet(twap_path)
+    twap_price = pd.read_parquet(twap_path) #.loc['20230701':]
     twap_price = align_columns(main_columns, twap_price)
     twap_dict[twap_name] = twap_price
 
@@ -163,10 +202,11 @@ for twap_name in twap_dict:
 del twap_dict
 
 # tradv
-tradv_path = processed_data_dir / 'ma1440_sp240' / 'tradv.parquet'
+tradv_path = tradv_dir / 'trade_A_amount.parquet'
 tradv = pd.read_parquet(tradv_path)
 tradv = align_columns(main_columns, tradv)
 tradv = align_index_with_main(main_index, tradv)
+tradv_avg = tradv.rolling(int(tradv_rolling_d*24*60/sp)).mean()
 
 
 # momentum
@@ -175,23 +215,12 @@ for mm_wd in momentum_limits:
     mm = (curr_price / curr_price.shift(int(mm_wd*240/sp)) - 1).replace([np.inf, -np.inf], np.nan).fillna(0.0)
     mm_dict[mm_wd] = mm
     
-# =============================================================================
-# # momentum
-# mm_dict = {}
-# rtn_1p = (curr_price / curr_price.shift(1) - 1).replace([np.inf, -np.inf], np.nan).fillna(0.0)
-# for mm_wd in momentum_limits:
-#     mm = rtn_1p.rolling(mm_wd).mean() / rtn_1p.rolling(mm_wd).std()
-#     mm_dict[mm_wd] = mm
-#     # breakpoint()
-# =============================================================================
-
-# =============================================================================
-# # momentum
-# mm_dict = {}
-# for mm_wd in momentum_limits:
-#     mm = (curr_price / curr_price.rolling(mm_wd).mean() - 1).replace([np.inf, -np.inf], np.nan).fillna(0.0)
-#     mm_dict[mm_wd] = mm
-# =============================================================================
+# vol
+rtn_1p = (curr_price / curr_price.shift(1) - 1).replace([np.inf, -np.inf], np.nan)
+rtn_vol = rtn_1p.rolling(window=rtn_vol_wd).apply(cumulative_volatility, raw=True)
+vol_rank = rtn_vol.rank(axis=1, pct=True)
+rtn_vol_penalty_abs = rtn_vol.stack().quantile(0.9)
+print(rtn_vol_penalty_abs)
 
 # load predict
 predict_dir = result_dir / test_name / 'predict'
@@ -231,14 +260,17 @@ max_wgt_list = []
 # w0 = np.zeros(factor.shape[1])
 w0 = factor.iloc[0] / np.sum(np.abs(factor.iloc[0]))
 opt_func = partial(future_optimal_weight_lp_cvxpy, max_multi=max_multi, max_wgt=max_wgt, 
-                   tradv_thresh=tradv_thresh, momentum_limits=momentum_limits, pf_limits=pf_limits,
+                   tradv_thresh=tradv_thresh, tradv_dsct=tradv_dsct,
+                   rtn_vol_penalty_abs=rtn_vol_penalty_abs, rtn_vol_penalty_pct=rtn_vol_penalty_pct, 
+                   rtn_vol_penalty_mul=rtn_vol_penalty_mul,
+                   momentum_limits=momentum_limits, pf_limits=pf_limits,
                    _lambda=_lambda, steepness=steepness, min_wgt=min_wgt)
 
 last_big_move_t = factor.index[0]
 
 # 初始化一个字典来存储每个TWAP对应的每个币种的收益
 twap_profit_dict = {twap_name: pd.DataFrame(index=factor.index, columns=factor.columns) for twap_name in twap_list}
-
+# breakpoint()
 for idx, t in enumerate(tqdm(factor.index, desc='simulating trades')):
     try:
         alpha = factor.loc[t].values
@@ -260,15 +292,32 @@ for idx, t in enumerate(tqdm(factor.index, desc='simulating trades')):
 
             profit_list.append([t, trade_cost] + total_profit_list)
             continue
-        tradv_t = tradv.loc[t].values * DAY_SEC / DATA_FREQ
+        tradv_t = tradv_avg.loc[t].values
         mm_t = {mm_wd: mm.loc[t].values for mm_wd, mm in mm_dict.items()}
+        rtn_vol_t = rtn_vol.loc[t].values
+        vol_rank_t = vol_rank.loc[t].values
         
         # get his pft
         pft_df = twap_profit_dict[twap_list[0]]
         iloc_pre_t = pft_df.index.get_loc(t) - 1
-        his_pft_t = {pf_wd: pft_df.iloc[max(int(iloc_pre_t-pf_wd*240/sp), 0):(iloc_pre_t+1)].sum(axis=0).values
+        his_pft_t = {pf_wd: pft_df.iloc[max(int(iloc_pre_t-pf_wd*240/sp)+1, 0):(iloc_pre_t+1)].sum(axis=0).values
                      for pf_wd in pf_limits}
-        
+# =============================================================================
+#         import pickle
+#         if t == pd.Timestamp('2023-07-01 05:30:00'):
+#             to_save = {}
+#             to_save['mm'] = {mm_wd: mm.loc[t] for mm_wd, mm in mm_dict.items()}
+#             to_save['pf'] = {pf_wd: pft_df.iloc[max(int(iloc_pre_t-pf_wd*240/sp)+1, 0):(iloc_pre_t+1)].sum(axis=0)
+#                          for pf_wd in pf_limits}
+#             to_save['alpha'] = factor.loc[t]
+#             to_save['if_to_trade'] = if_to_trade
+#             to_save['w0'] = w0
+#             with open(backtest_dir / 'data_230701_0530.pkl', 'wb') as f:
+#                 pickle.dump(to_save, f)
+#             breakpoint()
+# =============================================================================
+        # if idx == 200:
+        #     breakpoint()
         if t - last_big_move_t > timedelta(days=big_move_days):
             w1 = alpha / np.sum(np.abs(alpha))
             last_big_move_t = t
@@ -277,15 +326,19 @@ for idx, t in enumerate(tqdm(factor.index, desc='simulating trades')):
             #     w1, status, max_wgt = opt_func(alpha, w0, if_to_trade, tradv_t, mm_t, to_rate_thresh_L1)
             # else:
             #     w1, status, max_wgt = opt_func(alpha, w0, if_to_trade, tradv_t, mm_t, to_rate_thresh_L0)
-            w1, status, max_wgt = opt_func(alpha, w0, if_to_trade, tradv_t, mm_t, his_pft_t, to_rate_thresh_L0)
+            w1, status, max_wgt = opt_func(alpha, w0, if_to_trade, tradv_t, mm_t, his_pft_t, rtn_vol_t, 
+                                           vol_rank_t, to_rate_thresh_L0)
         
             if status != "optimal":
                 print(f"Optimal result not found at {t}!")
-                w1, status, max_wgt = opt_func(alpha, w0, if_to_trade, tradv_t, mm_t, his_pft_t, to_rate_thresh_L1)
+                w1, status, max_wgt = opt_func(alpha, w0, if_to_trade, tradv_t, mm_t, his_pft_t, rtn_vol_t, 
+                                               vol_rank_t, to_rate_thresh_L1)
                 if status != "optimal":
-                    w1, status, max_wgt = opt_func(alpha, w0, if_to_trade, tradv_t, mm_t, his_pft_t, to_rate_thresh_L2)
+                    w1, status, max_wgt = opt_func(alpha, w0, if_to_trade, tradv_t, mm_t, his_pft_t, rtn_vol_t, 
+                                                   vol_rank_t, to_rate_thresh_L2)
                     if status != "optimal":
-                        w1, status, max_wgt = opt_func(alpha, w0, if_to_trade, tradv_t, mm_t, his_pft_t, to_rate_thresh_L3)
+                        w1, status, max_wgt = opt_func(alpha, w0, if_to_trade, tradv_t, mm_t, his_pft_t, rtn_vol_t, 
+                                                       vol_rank_t, to_rate_thresh_L3)
                         if status != "optimal":
                             print(f"Optimal result not found at {t}!")
                             w1 = w0.copy()           
@@ -297,7 +350,8 @@ for idx, t in enumerate(tqdm(factor.index, desc='simulating trades')):
         # if np.sum(np.abs(w1 - w0)) > 0.35:
         #     breakpoint()
         trade_cost = - FEE * np.sum(np.abs(w1 - w0))
-    
+        
+        # if idx > 0:
         # 将收益记录到twap_profit_dict中，并计算每个TWAP的总收益
         total_profit_list = []
         for twap_name, profit in zip(twap_list, holding_pft_list):
@@ -306,12 +360,11 @@ for idx, t in enumerate(tqdm(factor.index, desc='simulating trades')):
             total_profit_list.append(total_profit)
 
         profit_list.append([t, trade_cost] + total_profit_list)
-        
+            
         w0 = w1.copy()
     except KeyError:
         break
 
-# breakpoint()
 profit = pd.DataFrame(profit_list, columns=['t', 'fee'] + [f'raw_rtn_{twap_name}' for twap_name in twap_list])
 profit.set_index('t', inplace=True)
 profit.to_csv(backtest_dir / f"profit_{name_to_save}.csv")
@@ -361,8 +414,8 @@ spec = fig.add_gridspec(ncols=1, nrows=3)
 ax0 = fig.add_subplot(spec[:2, :])
 ax0.set_title(title_text, fontsize=FONTSIZE_L1, pad=25)
 for twap_name in twap_list:
-    ax0.plot((profit[f'raw_rtn_{twap_name}'] + profit['fee']).cumsum(), label=f'rtn_{twap_name}', linewidth=3)
-ax0.plot((profit['fee']).abs().cumsum(), label='fee', color='r', linewidth=3)
+    ax0.plot((profd['return']).cumsum(), label=f'rtn_{twap_name}', linewidth=3)
+ax0.plot((profd['fee']).abs().cumsum(), label='fee', color='r', linewidth=3)
 
 ax1 = fig.add_subplot(spec[2, :])
 ax1.plot(long_num, label='long_num', color='r')

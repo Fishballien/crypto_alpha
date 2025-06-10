@@ -47,6 +47,46 @@ def get_period(start_date, end_date):
 
 
 # %%
+# =============================================================================
+# @dataclass
+# class RollingPeriods(object):
+#     
+#     fstart: datetime
+#     pstart: datetime
+#     puntil: datetime
+#     window_kwargs: dict = field(default_factory=dict)
+#     rrule_kwargs: dict = field(default_factory=dict)  # HINT💡 like: {'freq': 'M', 'bymonthday': -1}
+#     end_by: str = field(default_factory='')
+#     
+#     def __post_init__(self):
+#         FREQNAMES = rrule.FREQNAMES[:5]
+#         # FREQNAMES = ['YEARLY', 'MONTHLY', 'WEEKLY', 'DAILY', 'HOURLY']
+#         freq_mapping = {FREQNAMES[i][0]: i for i in range(len(FREQNAMES))}
+#         # {'Y': 0, 'M': 1, 'W': 2, 'D': 3, 'H': 4}
+#         if (freq := freq_mapping.get(self.rrule_kwargs['freq'], None)) is not None:
+#             self.rrule_kwargs['freq'] = freq
+#         cut_points = list(rrule.rrule(
+#             **self.rrule_kwargs, 
+#             dtstart=self.pstart, until=self.puntil))
+#         # breakpoint()
+#         if self.pstart == cut_points[0]:
+#             cut_points = cut_points[1:] if cut_points else []
+#         if cut_points and self.puntil == cut_points[-1]:
+#             cut_points = cut_points[:-1] if cut_points else []
+#         pred_period_start = [self.pstart] + cut_points
+#         pred_period_end = [cut_point - timedelta(days=1) if self.end_by == 'date' else cut_point
+#                            for cut_point in cut_points] + [self.puntil if self.end_by == 'date' 
+#                                                            else self.puntil + timedelta(days=1)]
+#         windows = relativedelta.relativedelta(**self.window_kwargs)
+#         fit_period_start = [max(dt - windows, self.fstart) for dt in pred_period_start]
+#         assert self.end_by in ['date', 'time']
+#         fit_period_end = [dt - relativedelta.relativedelta(days=1) if self.end_by == 'date' else dt 
+#                           for dt in pred_period_start]
+#         self.predict_periods = list(zip(pred_period_start, pred_period_end))
+#         self.fit_periods = list(zip(fit_period_start, fit_period_end))
+# =============================================================================
+        
+        
 @dataclass
 class RollingPeriods(object):
     
@@ -71,11 +111,11 @@ class RollingPeriods(object):
         if self.pstart == cut_points[0]:
             cut_points = cut_points[1:] if cut_points else []
         if cut_points and self.puntil == cut_points[-1]:
-            cut_points = cut_points[:-1] if cut_points else []
+            cut_points = cut_points if cut_points else []
         pred_period_start = [self.pstart] + cut_points
         pred_period_end = [cut_point - timedelta(days=1) if self.end_by == 'date' else cut_point
                            for cut_point in cut_points] + [self.puntil if self.end_by == 'date' 
-                                                           else self.puntil + timedelta(days=1)]
+                                                           else self.puntil]
         windows = relativedelta.relativedelta(**self.window_kwargs)
         fit_period_start = [max(dt - windows, self.fstart) for dt in pred_period_start]
         assert self.end_by in ['date', 'time']

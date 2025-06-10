@@ -23,7 +23,6 @@ import copy
 import traceback
 import xicorpy
 import toml
-import time
 from datetime import datetime
 from scipy.stats import skew
 from functools import partial
@@ -64,8 +63,8 @@ class FactorTest:
         self._load_test_params()
         self._load_neu()
         self._init_dirs()
-        # self._load_twap_price()
-        # self._preprocess_twap_return()
+        self._load_twap_price()
+        self._preprocess_twap_return()
         self._init_poly_if_needed()
         
     def _load_public_paths(self):
@@ -280,29 +279,18 @@ class FactorTest:
         return factor
     
     def test_one_factor(self, factor_name):
-        start_time_total = time.time()
-        
-        # 初始化计时字典
-        timing_stats = {}
-        
-        # 参数初始化计时
-        start_time = time.time()
         outlier_n = self.params['outlier_n']
         lag_list = self.params['lag_list']
         bin_step = self.params['bin_step']
-        
-        self._load_twap_price()
-        # self._preprocess_twap_return()
 
         twap_price = self.twap_price
-        # twap_to_mask = self.twap_to_mask
-        # sp_in_min = self.sp_in_min
-        # pp_by_sp = self.pp_by_sp
-        # pp_list = self.pp_list
-        # rtn_1p = copy.deepcopy(self.rtn_1p)
-        # rtn_of_lag = copy.deepcopy(self.rtn_of_lag)
-        # rtn_of_pp = copy.deepcopy(self.rtn_of_pp)
-        timing_stats['1_initialization'] = time.time() - start_time
+        twap_to_mask = self.twap_to_mask
+        sp_in_min = self.sp_in_min
+        pp_by_sp = self.pp_by_sp
+        pp_list = self.pp_list
+        rtn_1p = copy.deepcopy(self.rtn_1p)
+        rtn_of_lag = copy.deepcopy(self.rtn_of_lag)
+        rtn_of_pp = copy.deepcopy(self.rtn_of_pp)
         
 # =============================================================================
 #         plot_path = self.plot_dir / f"{factor_name}_{sp_in_min}min.jpg"
@@ -310,8 +298,6 @@ class FactorTest:
 #             return 1
 # =============================================================================
         
-        # 加载因子数据计时
-        start_time = time.time()
         # factor_path = self.factor_dir / f'{factor_name}.parquet'
         # try:
         #     factor = pd.read_parquet(factor_path)
@@ -323,34 +309,27 @@ class FactorTest:
             print(self.factor_dir / f'{factor_name}.parquet')
             return 0
         # breakpoint()
-        timing_stats['2_load_factor'] = time.time() - start_time
         
-        # 数据对齐计时
-        start_time = time.time()
         # align columns
         factor = align_columns(twap_price.columns, factor)
         
         # align index
         # TODO: 待完善，现版本较粗糙
-        # org_len_twap = len(twap_price)
+        org_len_twap = len(twap_price)
 # =============================================================================
 #         factor, twap_price = align_index(factor, twap_price)
 # =============================================================================
         twap_price = twap_price.loc[factor.index.min():factor.index.max()] # 按factor头尾截取
         factor = factor.reindex(twap_price.index) # 按twap reindex，确保等长
-        # if len(twap_price) != org_len_twap:
-        self._reload_twap_return(twap_price)
-        twap_to_mask = self.twap_to_mask
-        sp_in_min = self.sp_in_min
-        pp_by_sp = self.pp_by_sp
-        pp_list = self.pp_list
-        rtn_1p = copy.deepcopy(self.rtn_1p)
-        rtn_of_lag = copy.deepcopy(self.rtn_of_lag)
-        rtn_of_pp = copy.deepcopy(self.rtn_of_pp)
-        timing_stats['3_align_data'] = time.time() - start_time
+        if len(twap_price) != org_len_twap:
+            self._reload_twap_return(twap_price)
+            twap_to_mask = self.twap_to_mask
+            sp_in_min = self.sp_in_min
+            pp_list = self.pp_list
+            rtn_1p = copy.deepcopy(self.rtn_1p)
+            rtn_of_lag = copy.deepcopy(self.rtn_of_lag)
+            rtn_of_pp = copy.deepcopy(self.rtn_of_pp)
         
-        # 掩码和规范化计时
-        start_time = time.time()
         # rough mask
         to_mask = factor.isna() | twap_to_mask
         
@@ -366,10 +345,7 @@ class FactorTest:
             traceback.print_exc()
             # breakpoint()
             return 0
-        timing_stats['4_masking_normalization'] = time.time() - start_time
         
-        # 应用掩码计时
-        start_time = time.time()
         # breakpoint()
 
         # apply mask
@@ -378,10 +354,7 @@ class FactorTest:
             
         for pp in pp_list:
             rtn_of_pp[pp] = rtn_of_pp[pp].mask(to_mask)
-        timing_stats['5_apply_mask'] = time.time() - start_time
             
-        # 排序计时
-        start_time = time.time()
         # rank
         factor_rank = factor_processed.rank(axis=1, pct=True
                                             ).sub(0.5 / factor_processed.count(axis=1), axis=0
@@ -390,10 +363,7 @@ class FactorTest:
         fct_n_pct = 2 * (factor_rank - 0.5)
         # tb_only = ((factor_rank <= 0.1) & (factor_rank > 0)) | (factor_rank >= 0.9)
         # breakpoint()
-        timing_stats['6_ranking'] = time.time() - start_time
         
-        # 多空计时
-        start_time = time.time()
         # long short
         df_gp = pd.DataFrame()
         for lag in lag_list:
@@ -402,29 +372,83 @@ class FactorTest:
             gpsd = gps.resample('D').sum(min_count=1).dropna()
             df_gp[f'long_short_{lag}'] = gpsd
         df_gp.to_parquet(self.data_dir / f'gp_{factor_name}.parquet')
-        timing_stats['7_long_short'] = time.time() - start_time
         
-        # IC计算计时
-        start_time = time.time()    
+            
         # ic
         df_ic = pd.DataFrame()
         df_icd = pd.DataFrame()
         for pp in pp_list:
-            if pp != 240:
-                continue
             rtn_pp = rtn_of_pp[pp]
-            # breakpoint()
             ics = factor_processed.corrwith(rtn_pp, axis=1, method='spearman').replace([np.inf, -np.inf], np.nan).fillna(0)
             icsm = ics.resample('M').mean()
             df_ic[f'ic_{pp}min'] = icsm
             icsd = ics.resample('D').mean()
             df_icd[f'ic_{pp}min'] = icsd
+            
+# =============================================================================
+#             f_tb = factor_processed.mask(~tb_only)
+#             r_tb = rtn_pp.mask(~tb_only)
+#             icstb = f_tb.corrwith(r_tb, axis=1, method='spearman').replace([np.inf, -np.inf], np.nan).fillna(0)
+#             icstbm = icstb.resample('M').mean()
+#             df_ic[f'ic_tb_{pp}min'] = icstbm
+#             
+#             ics = factor_processed.corrwith(rtn_pp, axis=1, method='pearson').replace([np.inf, -np.inf], np.nan).fillna(0)
+#             icsm = ics.resample('M').mean()
+#             df_ic[f'ic_ps_{pp}min'] = icsm
+#             
+#             ics = factor_processed.corrwith(rtn_pp, axis=1, method='kendall').replace([np.inf, -np.inf], np.nan).fillna(0)
+#             icsm = ics.resample('M').mean()
+#             df_ic[f'ic_kd_{pp}min'] = icsm
+# =============================================================================
+            
+# =============================================================================
+#             if pp == 240:
+#                 temp_dir = Path('/home/xintang/crypto/multi_factor/factor_test_by_alpha/sample_data/spread_strength')
+#                 temp_dir.mkdir(parents=True, exist_ok=True)
+#                 for i, idx in enumerate(ics.index):
+#                     factor_row = factor_processed.loc[idx, :]
+#                     rtn_row = rtn_pp.loc[idx, :]
+#                     plt.figure(figsize=(10, 10))
+#                     plt.title(f'{idx} {ics[idx]}', fontsize=10, pad=15)
+#                     plt.grid(linestyle=':')
+#                     plt.scatter(factor_row, rtn_row, color='r' if ics[idx] > 0 else 'g')
+#                     plt.axvline(0, linestyle='--')
+#                     plt.axvline(factor_row.median(), color='k', linestyle='--')
+#                     plt.axhline(0, linestyle='--')
+#                     plt.savefig(temp_dir / f"{i}.jpg", dpi=100, bbox_inches="tight")
+#                     plt.close()
+# =============================================================================
         df_ic.to_parquet(self.data_dir / f'ic_{factor_name}.parquet')
         df_icd.to_parquet(self.data_dir / f'icd_{factor_name}.parquet')
-        timing_stats['8_ic_calculation'] = time.time() - start_time
         
-        # 动量计时
-        start_time = time.time()
+        # xicor
+# =============================================================================
+#         df_xicor = pd.DataFrame()
+#         df_xicord = pd.DataFrame()
+#         for pp in pp_list:
+#             rtn_pp = rtn_of_pp[pp]
+#             ics = pd.Series(xi_correlation(factor_processed, rtn_pp), 
+#                             index=factor_processed.index).replace([np.inf, -np.inf], np.nan).fillna(0)
+#             icsm = ics.resample('M').mean()
+#             df_xicor[f'xi_{pp}min'] = icsm
+#             icsd = ics.resample('D').mean()
+#             df_xicord[f'xi_{pp}min'] = icsd
+#         df_xicor.to_parquet(self.data_dir / f'xicor_{factor_name}.parquet')
+#         df_xicord.to_parquet(self.data_dir / f'xicord_{factor_name}.parquet')
+# =============================================================================
+# =============================================================================
+#         df_xicor = pd.DataFrame()
+#         df_xicord = pd.DataFrame()
+#         for pp in pp_list:
+#             rtn_pp = rtn_of_pp[pp]
+#             icsd = calc_corr_daily(factor_processed, rtn_pp, method='xi')
+#             icsm = icsd.resample('M').mean()
+#             df_xicor[f'xi_{pp}min'] = icsm
+#             df_xicord[f'xi_{pp}min'] = icsd
+#         df_xicor.to_parquet(self.data_dir / f'xicor_{factor_name}.parquet')
+#         df_xicord.to_parquet(self.data_dir / f'xicord_{factor_name}.parquet')
+# =============================================================================
+        
         # moment
         df_mmtd = pd.DataFrame()
         df_mmt = pd.DataFrame()
@@ -442,10 +466,19 @@ class FactorTest:
             print(factor_name, factor_mmt.dropna())
             adf_result = (0, 0)
             # return 0
-        timing_stats['9_momentum'] = time.time() - start_time
             
-        # 换手率计时
-        start_time = time.time()
+        # turnover
+# =============================================================================
+#         df_hsr = pd.DataFrame()
+#         for direction in [1, -1]:
+#             open_cond = factor_rank > 0.9 if direction > 0 else (factor_rank < 0.1) & (factor_rank > 0)
+#             ps = pd.DataFrame(np.where(open_cond, 1, 0), index=factor_rank.index, columns=factor_rank.columns).fillna(0)
+#             hsr = ((ps - ps.shift(1)).abs().sum(axis=1) / (2 * ps.abs().sum(axis=1))).replace([np.inf, -np.inf], np.nan)
+#             hsrm = hsr.resample('M').mean()
+#             df_hsr[f'turnover_direction_{direction}'] = hsrm
+#         df_hsr.to_parquet(self.data_dir / f'hsr_{factor_name}.parquet')
+# =============================================================================
+        
         df_hsrts = pd.DataFrame()
         df_hsr = pd.DataFrame()
         ps = fct_n_pct.mask(to_mask)
@@ -455,18 +488,13 @@ class FactorTest:
         df_hsrts.to_parquet(self.data_dir / f'hsrts_{factor_name}.parquet')
         df_hsr['turnover'] = hsrm
         df_hsr.to_parquet(self.data_dir / f'hsr_{factor_name}.parquet')
-        timing_stats['10_turnover'] = time.time() - start_time
         
-        # 分组回测计时
-        start_time = time.time()
         # bins
         steps_start = np.arange(0, 1, bin_step)
         steps_end = np.arange(bin_step, 1+bin_step, bin_step)
         steps_of_lag = {}
         
         for lag in lag_list:
-            if lag != 0:
-                continue
             rtn_lag = rtn_of_lag[lag]
             df_step = pd.DataFrame()
             for step_start, step_end in zip(steps_start, steps_end):
@@ -481,10 +509,7 @@ class FactorTest:
             steps_of_lag[lag] = df_step
         with open(self.data_dir / f'bins_{factor_name}.pkl', 'wb') as file:
             pickle.dump(steps_of_lag, file)
-        timing_stats['11_bins_backtest'] = time.time() - start_time
             
-        # 等权分组回测计时
-        start_time = time.time()
         # bins same weight
         # bin_step_sw = 0.025
         # steps_start = np.arange(0, 1, bin_step_sw)
@@ -507,23 +532,6 @@ class FactorTest:
             steps_of_lag_sw[lag] = df_step
         with open(self.data_dir / f'bins_sw_{factor_name}.pkl', 'wb') as file:
             pickle.dump(steps_of_lag_sw, file)
-        timing_stats['12_equal_weight_bins'] = time.time() - start_time
-        
-        # 总耗时计算
-        total_time = time.time() - start_time_total
-        timing_stats['total_time'] = total_time
-        
-        # 保存计时统计信息
-        with open(self.data_dir / f'timing_stats_{factor_name}.pkl', 'wb') as file:
-            pickle.dump(timing_stats, file)
-            
-        # 输出计时统计信息
-        print(f"\n===== Performance Timing for {factor_name} =====")
-        print(f"Total execution time: {total_time:.4f} seconds")
-        for key, value in timing_stats.items():
-            if key != 'total_time':
-                percentage = (value / total_time) * 100
-                print(f"{key:25}: {value:.4f} seconds ({percentage:.2f}%)")
             
 # =============================================================================
 #         # bins vol penalty
@@ -699,14 +707,13 @@ class FactorTest:
         factor_dir = factor_data_dir / process_name
         factor_name_list = [path.stem for path in factor_dir.glob('*.parquet')]
         if self.n_workers is None or self.n_workers == 1:
-            self.test_one_factor(factor_name_list[0])
-            # for factor_name in tqdm(factor_name_list, desc=f'{self.process_name}'):
-            #     self.test_one_factor(factor_name)
+            for factor_name in tqdm(factor_name_list, desc=f'{self.process_name}'):
+                self.test_one_factor(factor_name)
         else:
             with ProcessPoolExecutor(max_workers=self.n_workers) as executor:
                 all_tasks = [executor.submit(self.test_one_factor, factor_name)
                              for factor_name in factor_name_list
-                             if not os.path.exists(self.data_dir / f'hsr_{factor_name}.parquet') or not skip_exists
+                             if not os.path.exists(self.data_dir / f'bins_sw_{factor_name}.pkl') or not skip_exists
                              ]
                 num_of_success = 0
                 for task in tqdm(as_completed(all_tasks), total=len(all_tasks), desc=f'{self.process_name}'):

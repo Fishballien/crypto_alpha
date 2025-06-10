@@ -21,24 +21,24 @@ sys.path.append(str(project_dir))
 
 
 # %% import self-defined
-from test_and_eval.rolling_eval import RollingEval
+from synthesis.rolling_cluster import RollingCluster
 
           
 # %% main
 def main():
     '''read args'''
     parser = argparse.ArgumentParser()
-    parser.add_argument('-e', '--eval_name', type=str, help='eval_name')
-    parser.add_argument('-er', '--eval_rolling_name', type=str, help='eval_rolling_name')
+    parser.add_argument('-c', '--cluster_name', type=str, help='cluster_name')
     parser.add_argument('-pst', '--pstart', type=str, default='20220101', help='pstart')
     parser.add_argument('-pu', '--puntil', type=str, help='puntil')
-    parser.add_argument('-et', '--eval_type', type=str, help='eval_type')
-    parser.add_argument('-wkr', '--n_workers', type=int, default=1, help='n_workers')
+    parser.add_argument('-ct', '--cluster_type', type=str, help='cluster_type')
+    parser.add_argument('-twkr', '--t_workers', type=int, default=1, help='t_workers')
+    parser.add_argument('-pwkr', '--p_workers', type=int, default=1, help='p_workers')
     args = parser.parse_args()
     args_dict = vars(args)
     
-    e = RollingEval(**args_dict)
-    e.run()
+    c = RollingCluster(**args_dict)
+    c.run()
         
         
 # %% main

@@ -74,8 +74,11 @@ def adjustable_cubic_function(x, n=3, y_start=0.5, y_end=1):
     return y
 
 
-def future_optimal_weight_lp_cvxpy(alpha, w0, if_to_trade, tradv_t, mm_t, his_pft_t, to_rate_thresh, 
-                                   max_multi=1, max_wgt=None, tradv_thresh=None, momentum_limits={}, pf_limits={},
+def future_optimal_weight_lp_cvxpy(alpha, w0, if_to_trade, tradv_t, mm_t, his_pft_t, rtn_vol_t, vol_rank_t, 
+                                   to_rate_thresh, 
+                                   max_multi=1, max_wgt=None, tradv_thresh=None, tradv_dsct=None, 
+                                   rtn_vol_penalty_abs=None, rtn_vol_penalty_pct=None, rtn_vol_penalty_mul=None, 
+                                   momentum_limits={}, pf_limits={},
                                    _lambda=1, steepness=None, min_wgt=0.5):
     # init
     final_w1 = np.zeros(len(w0))
@@ -85,6 +88,12 @@ def future_optimal_weight_lp_cvxpy(alpha, w0, if_to_trade, tradv_t, mm_t, his_pf
     tradv_t = tradv_t[if_to_trade == 1]
     mm_t = {mm_wd: mm[if_to_trade == 1] for mm_wd, mm in mm_t.items()}
     pf_t = {pf_wd: pf[if_to_trade == 1] for pf_wd, pf in his_pft_t.items()}
+    
+    if rtn_vol_penalty_abs is not None and rtn_vol_penalty_mul is not None:
+        need_vol_penalty = (rtn_vol_t > rtn_vol_penalty_abs)[if_to_trade == 1]
+    if rtn_vol_penalty_pct is not None and rtn_vol_penalty_mul is not None:
+        need_vol_penalty = (vol_rank_t > rtn_vol_penalty_pct)[if_to_trade == 1]
+    
     w0 = w0 - np.mean(w0) # ???
     w0 = w0 / np.sum(np.abs(w0)) if np.sum(np.abs(w0)) != 0 else w0
     
@@ -119,6 +128,11 @@ def future_optimal_weight_lp_cvxpy(alpha, w0, if_to_trade, tradv_t, mm_t, his_pf
             alpha_r = alpha_r.rank(pct=True).sub(0.5 / alpha_r.count()).replace([np.inf, -np.inf], np.nan) - 0.5 # ???: 重复？
             max_wgt = (alpha_r / np.abs(alpha_r).sum()).max() * max_multi # org
             # max_wgt = np.abs(alpha) * max_multi
+            if tradv_thresh > 0 and tradv_dsct is not None:
+                tradv_multi = np.where(tradv_t < tradv_thresh, 0.5, 1)
+                max_wgt *= tradv_multi
+            if rtn_vol_penalty_mul is not None:
+                max_wgt *= np.where(need_vol_penalty == 1, rtn_vol_penalty_mul, 1)
             constraints += [w <= max_wgt, w >= -max_wgt]
         else:
             alpha_r = pd.Series(alpha)
@@ -129,7 +143,6 @@ def future_optimal_weight_lp_cvxpy(alpha, w0, if_to_trade, tradv_t, mm_t, his_pf
             alpha_sign = np.where(alpha_sign==0, 1, alpha_sign)
             adj_alpha *= alpha_sign
             max_wgt = adj_alpha / adj_alpha.abs().sum() * max_multi
-            # breakpoint()
             constraints += [
                w >= np.minimum(-np.min(max_wgt.abs()), max_wgt.values),
                w <= np.maximum(np.max(max_wgt.abs()), max_wgt.values)
@@ -137,9 +150,11 @@ def future_optimal_weight_lp_cvxpy(alpha, w0, if_to_trade, tradv_t, mm_t, his_pf
     else:
         constraints += [w <= max_wgt, w >= -max_wgt]
     
-    # 流动性约束
-    if tradv_thresh > 0:
-        constraints.append(w[tradv_t < tradv_thresh] == 0)
+# =============================================================================
+#     # 流动性约束
+#     if tradv_thresh > 0:
+#         constraints.append(w[tradv_t < tradv_thresh] == 0)
+# =============================================================================
     
     # 动量约束
     for mm_wd in momentum_limits:
@@ -168,6 +183,8 @@ def future_optimal_weight_lp_cvxpy(alpha, w0, if_to_trade, tradv_t, mm_t, his_pf
     
     # if np.max(np.abs(w1)) > 0.05:
     #     breakpoint()
+    # if w1 is not None:
+    #     print(np.sum(np.abs(w1)))
 
     # 定义和求解问题
     try:

@@ -29,19 +29,28 @@ from utils.timeutils import RollingPeriods
 
     
 # %% main
-def main():
-    '''read args'''
-    parser = argparse.ArgumentParser()
-    parser.add_argument('-t', '--test_name', type=str, help='test_name')
-    parser.add_argument('-fst', '--fstart', type=str, default='20210101', help='fstart')
-    parser.add_argument('-pst', '--pstart', type=str, default='20220101', help='pstart')
-    parser.add_argument('-pu', '--puntil', type=str, help='puntil')
-    parser.add_argument('-wkr', '--n_workers', type=int, default=1, help='n_workers')
-    args = parser.parse_args()
-    args_dict = vars(args)
-    
-    test_name = args.test_name
-    n_workers = args.n_workers
+def main(test_name=None, puntil=None, fstart='20210101', pstart='20220101', mode='rolling', n_workers=1):
+    if test_name is None:
+        '''read args'''
+        parser = argparse.ArgumentParser()
+        parser.add_argument('-t', '--test_name', type=str, help='test_name')
+        parser.add_argument('-fst', '--fstart', type=str, default='20210101', help='fstart')
+        parser.add_argument('-pst', '--pstart', type=str, default='20220101', help='pstart')
+        parser.add_argument('-pu', '--puntil', type=str, help='puntil')
+        parser.add_argument('-m', '--mode', type=str, default='rolling', help='mode')
+        parser.add_argument('-wkr', '--n_workers', type=int, default=1, help='n_workers')
+        args = parser.parse_args()
+        args_dict = vars(args)
+        
+        test_name = args.test_name
+        mode = args.mode
+        n_workers = args.n_workers
+    else:
+        args_dict = {
+            'puntil': puntil,
+            'fstart': fstart,
+            'pstart': pstart,
+            }
     
     # trans date
     rolling_dates = {date_name: datetime.strptime(args_dict[date_name], '%Y%m%d')
@@ -78,14 +87,36 @@ def main():
     predict_periods = fit_rolling.predict_periods
     
     # run fit & predict
-    for fltp, fp, pp in list(zip(filter_periods, fit_periods, predict_periods)):
+    if mode == 'rolling':
+        for fltp, fp, pp in list(zip(filter_periods, fit_periods, predict_periods)):
+            mf.set_filter_period(*fltp)
+            mf.fit_once(*fp)
+            # mf.log_model_info(model_start_date=fp[0], model_end_date=fp[1])
+            # mf.plot_trees(model_start_date, model_end_date)
+            mf.predict_once(*fp, *pp)
+            mf.test_predicted()
+        mf.compare_model_with_factors()
+    elif mode == 'update':
+        fltp = filter_periods[-1]
+        fp = fit_periods[-1]
+        pp = predict_periods[-1]
         mf.set_filter_period(*fltp)
         mf.fit_once(*fp)
         # mf.log_model_info(model_start_date=fp[0], model_end_date=fp[1])
         # mf.plot_trees(model_start_date, model_end_date)
         mf.predict_once(*fp, *pp)
         mf.test_predicted()
-    mf.compare_model_with_factors()
+        mf.compare_model_with_factors()
+    elif mode == 'update_predict':
+        pp = predict_periods[-1]
+        index = -2 if pp[0] == pp[1] else -1
+        pp = predict_periods[index]
+        fltp = filter_periods[index]
+        fp = fit_periods[index]
+        mf.set_filter_period(*fltp)
+        mf.predict_once(*fp, *pp)
+        mf.test_predicted()
+        mf.compare_model_with_factors()
 
 
 # %% main

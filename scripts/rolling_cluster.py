@@ -44,7 +44,7 @@ cluster_name = 'agg_240712_1'
 cl_rolling_params = {
     'fstart': datetime(2021, 1, 1),
     'pstart': datetime(2022, 1, 1),
-    'puntil': datetime(2024, 4, 30),
+    'puntil': datetime(2024, 5, 2),
     'rrule_kwargs': {"freq": "M", "interval": 1, "bymonthday": [1, 16]},
     'window_kwargs': {'months': 24},
     'end_by': 'time', 

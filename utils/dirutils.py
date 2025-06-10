@@ -15,6 +15,7 @@ emoji: 🔔 ⏳ ⏰ 🔒 🔓 🛑 🚫 ❗ ❓ ❌ ⭕ 🚀 🔥 💧 💡 🎵
 import os
 import yaml
 import fnmatch
+from pathlib import Path
 
 
 # %% leaf
@@ -61,6 +62,12 @@ class DirectoryProcessor:
     @property
     def list_of_tuple(self):
         return self._list
+    
+    
+def get_filenames_by_extension(folder_path, extension):
+    folder = Path(folder_path)
+    filenames = [file.stem for file in folder.iterdir() if file.suffix == extension]
+    return filenames
 
 
 # %% count
@@ -95,3 +102,4 @@ def load_path_config(project_dir):
     with path_config_path.open('r') as file:
         path_config = yaml.safe_load(file)
     return path_config
+
