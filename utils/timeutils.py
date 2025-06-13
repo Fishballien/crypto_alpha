@@ -96,6 +96,7 @@ class RollingPeriods(object):
     window_kwargs: dict = field(default_factory=dict)
     rrule_kwargs: dict = field(default_factory=dict)  # HINT💡 like: {'freq': 'M', 'bymonthday': -1}
     end_by: str = field(default_factory='')
+    delay_days: int = field(default=0)  # 新增延迟天数参数
     
     def __post_init__(self):
         FREQNAMES = rrule.FREQNAMES[:5]
@@ -121,8 +122,17 @@ class RollingPeriods(object):
         assert self.end_by in ['date', 'time']
         fit_period_end = [dt - relativedelta.relativedelta(days=1) if self.end_by == 'date' else dt 
                           for dt in pred_period_start]
-        self.predict_periods = list(zip(pred_period_start, pred_period_end))
+        
+        # fit_periods保持不变
         self.fit_periods = list(zip(fit_period_start, fit_period_end))
+        
+        # predict_periods的起始时间都往后延迟delay_days天
+        if self.delay_days > 0:
+            pred_period_start_delayed = [dt + timedelta(days=self.delay_days) for dt in pred_period_start]
+            pred_period_end_delayed = [dt + timedelta(days=self.delay_days) for dt in pred_period_end]
+            self.predict_periods = list(zip(pred_period_start_delayed, pred_period_end_delayed))
+        else:
+            self.predict_periods = list(zip(pred_period_start, pred_period_end))
         
         
 def generate_timeline_params(start_date, end_date):

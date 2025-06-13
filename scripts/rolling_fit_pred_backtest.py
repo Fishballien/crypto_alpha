@@ -69,18 +69,23 @@ def main(test_name=None, puntil=None, fstart='20210101', pstart='20220101', mode
     predict_params = model_config['predict_params']
     model_fit = choose_model(fit_params['model'])
     
+    # 从配置文件读取delay_days，如果没有配置则默认为0
+    delay_days = rolling_params_variable.get('delay_days', 0)
+    
     # init model
     mf = model_fit(test_name, preprocess_params=preprocess_params, fit_params=fit_params, predict_params=predict_params,
                    n_workers=n_workers,
                    )
     
-    # prepare rolling
+    # prepare rolling - 增加delay_days参数
     filter_rolling = RollingPeriods(**rolling_dates, 
                                     **{'rrule_kwargs': rolling_params_variable['rrule'], 
-                                       'window_kwargs': rolling_params_variable['filter_window'],})
+                                       'window_kwargs': rolling_params_variable['filter_window'],
+                                       'delay_days': delay_days})
     fit_rolling = RollingPeriods(**rolling_dates, 
                                  **{'rrule_kwargs': rolling_params_variable['rrule'], 
-                                    'window_kwargs': rolling_params_variable['fit_window'],})
+                                    'window_kwargs': rolling_params_variable['fit_window'],
+                                    'delay_days': delay_days})
     
     filter_periods = filter_rolling.fit_periods
     fit_periods = fit_rolling.fit_periods
@@ -91,6 +96,14 @@ def main(test_name=None, puntil=None, fstart='20210101', pstart='20220101', mode
         for fltp, fp, pp in list(zip(filter_periods, fit_periods, predict_periods)):
             mf.set_filter_period(*fltp)
             mf.fit_once(*fp)
+            # mf.log_model_info(model_start_date=fp[0], model_end_date=fp[1])
+            # mf.plot_trees(model_start_date, model_end_date)
+            mf.predict_once(*fp, *pp)
+            mf.test_predicted()
+        mf.compare_model_with_factors()
+    elif mode == 'rolling_predict':
+        for fltp, fp, pp in list(zip(filter_periods, fit_periods, predict_periods)):
+            mf.set_filter_period(*fltp)
             # mf.log_model_info(model_start_date=fp[0], model_end_date=fp[1])
             # mf.plot_trees(model_start_date, model_end_date)
             mf.predict_once(*fp, *pp)
@@ -122,4 +135,3 @@ def main(test_name=None, puntil=None, fstart='20210101', pstart='20220101', mode
 # %% main
 if __name__=='__main__':
     main()
-    
