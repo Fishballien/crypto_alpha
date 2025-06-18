@@ -79,7 +79,8 @@ def future_optimal_weight_lp_cvxpy(alpha, w0, if_to_trade, tradv_t, mm_t, his_pf
                                    max_multi=1, max_wgt=None, tradv_thresh=None, tradv_dsct=None, 
                                    rtn_vol_penalty_abs=None, rtn_vol_penalty_pct=None, rtn_vol_penalty_mul=None, 
                                    momentum_limits={}, pf_limits={},
-                                   _lambda=1, steepness=None, min_wgt=0.5):
+                                   _lambda=1, steepness=None, min_wgt=0.5,
+                                   max_single_turnover=None):
     # init
     final_w1 = np.zeros(len(w0))
     # 过滤和调整输入数据
@@ -120,6 +121,10 @@ def future_optimal_weight_lp_cvxpy(alpha, w0, if_to_trade, tradv_t, mm_t, his_pf
     
     # 换手率控制
     constraints.append(cp.norm(w - w0, 1) <= to_rate_thresh * 2) # ???
+    
+    # 单币种换手率约束 - 新增（向量化版本）
+    if max_single_turnover is not None:
+        constraints.append(cp.abs(w - w0) <= max_single_turnover)
     
     # 单个资产权重控制
     if max_wgt is None:

@@ -141,6 +141,30 @@ def get_top_k_mask(z_scores, k):
     return top_k_mask
 
 
+def save_backtest_debug_data(t, debug_data, backtest_dir):
+    """保存回测调试数据到pickle文件"""
+    try:
+        import pickle
+        
+        # 创建调试数据目录
+        debug_dir = backtest_dir / 'debug_data'
+        debug_dir.mkdir(parents=True, exist_ok=True)
+        
+        # 生成文件名（基于时间戳）
+        ts_str = t.strftime('%Y%m%d_%H%M%S')
+        debug_file = debug_dir / f"debug_data_{ts_str}.pkl"
+        
+        # 添加时间戳到调试数据中
+        debug_data['timestamp'] = t
+        
+        # 保存到pickle文件
+        with open(debug_file, 'wb') as f:
+            pickle.dump(debug_data, f)
+            
+    except Exception as e:
+        print(f"Warning: Error saving debug data for {t}: {e}")
+
+
 # %%
 def backtest(test_name, backtest_name):
     path_config = load_path_config(project_dir)
@@ -193,6 +217,7 @@ def backtest(test_name, backtest_name):
     mask_pr_zscore_smth_params = backtest_param.get('mask_pr_zscore_smth')
     funding_abs_limit = backtest_param.get('funding_abs_limit')
     funding_limit = backtest_param.get('funding_limit')
+    max_single_turnover = backtest_param.get('max_single_turnover')
         
 
     backtest_dir = result_dir / test_name / 'backtest' / backtest_name
@@ -419,7 +444,7 @@ def backtest(test_name, backtest_name):
                            rtn_vol_penalty_abs=rtn_vol_penalty_abs, rtn_vol_penalty_pct=rtn_vol_penalty_pct, 
                            rtn_vol_penalty_mul=rtn_vol_penalty_mul,
                            momentum_limits=momentum_limits, pf_limits=pf_limits,
-                           _lambda=_lambda, steepness=steepness, min_wgt=min_wgt)
+                           _lambda=_lambda, steepness=steepness, min_wgt=min_wgt, max_single_turnover=max_single_turnover)
     
     last_big_move_t = factor.index[0]
     
